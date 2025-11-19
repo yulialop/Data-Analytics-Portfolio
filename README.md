@@ -1,0 +1,3 @@
+This repository showcases selected work from my studies and practice in business analytics and BI. It brings together projects completed in R and Python that illustrate my approach to data preparation, analysis and communication. Each folder contains reproducible outputs with code written for clarity, supported by explanations designed to make the findings accessible to a non-technical audience.
+
+Exploring the projects provides a view of the analytical reasoning, the choices made along the way and the final results. Datasets are included when possible, and simulated data is used when restrictions apply so that the analytical logic remains intact. For questions or collaboration opportunities, please feel free to contact me through my GitHub profile.
