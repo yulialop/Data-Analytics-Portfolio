@@ -1,0 +1,1003 @@
+---
+title: "A Discrete-Event Simulation Study"
+author: 'YLG'
+date: "April 22, 2025"
+output:
+  bookdown::html_document2:
+    toc: true
+    theme: cerulean
+    highlight: monochrome
+    number_sections: false
+    fig_caption: true
+    fig_width: 9.5
+    code_folding: show 
+    always_allow_html: true
+editor_options:
+  chunk_output_type: inline
+fontsize: 12pt 
+fontfamily: Helvetica  
+geometry: "width=90%"           
+---
+
+<div style="background-color:#f0f0f0; padding:10px; border-left:5px solid #2FA4E7;">
+  <strong>Code Visibility and Accessibility</strong>  
+  <p>The R code chunks in this report are shown by default. The `Code` dropdown at the beginning of the report allows all chunks to be hidden at once for better readability. Alternatively, individual code sections can be hidden by clicking the `Code` button above each chunk. Clicking the button again will show the code.</p>
+</div>
+
+```{r setup, message=FALSE, include=TRUE}
+# Global chunk options
+knitr::opts_chunk$set(
+  message = FALSE,
+  warning = FALSE,
+  comment = NA,
+  fig.pos = 'H'
+)
+
+# Libraries
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+library(plotly)
+library(ggthemes)
+library(knitr)
+library(simmer)
+library(simmer.plot)
+```
+
+# Acknowledgement
+
+Grammarly, an AI-powered writing assistant tool, enhanced the clarity, coherence, and grammatical accuracy of initial notes and the final draft. Its assistance in identifying errors and suggesting style and vocabulary improvements significantly contributed to the quality of this report.
+
+# Problem Definition and Project Objectives
+
+ABC Co. is a manufacturing company serving clients in Chile, Morocco, Portugal, and Greece. Its production process consists of three main stages: moulding, inspection, and packaging. Each stage has varying processing times depending on the client's country, with a degree of unpredictability.
+
+Customer orders arrive regularly but not at fixed intervals, averaging one order every 0.6 minutes. The facility currently has 10 moulding machines, 9 inspection tables, and 9 packaging machines.
+
+This project aims to analyse and simulate the current production process to uncover inefficiencies and explore how changes in resource allocation might improve performance. Specifically, the study will focus on identifying bottlenecks, measuring average waiting times at each stage, and calculating the financial impact of delays—particularly between the moulding and inspection phases. The ultimate goal is to propose data-driven improvements that enhance operational efficiency and reduce costs.
+
+# Conceptual Model
+
+## Process Overview
+ABC Co.’s production system consists of three consecutive stages: moulding, inspection, and packaging. Products are manufactured for clients from Chile, Morocco, Portugal, and Greece. Processing times at each stage vary by country and follow exponential distributions.
+
+```{r}
+# Define production parameters by country
+production_parameters <- data.frame(
+  Country    = c("Chile", "Morocco", "Portugal", "Greece"),
+  Moulding   = c(5.3, 4.4, 4.6, 2.5),
+  Inspection = c(3.7, 1.3, 5.2, 3.4),
+  Packaging  = c(3.8, 3.9, 3.8, 3.1)
+)
+
+# Display the table
+kable(production_parameters, caption = "Production Parameters by Country")
+```
+
+## Order Arrivals
+Customer orders arrive at random intervals, following a normal distribution with a mean inter-arrival time of 0.6 minutes and a standard deviation of 0.1 minutes.
+
+## Resources and Flow
+The facility is equipped with 10 moulding machines, 9 inspection tables, and 9 packaging machines. Products move through each stage in sequence. If a resource is busy, items wait in a queue until it becomes available. (Figure \@ref(fig:f1)). 
+
+```{r f1, fig.cap="Workflow Diagram of the Production Process", out.width = '100%'}
+# Include an external image
+knitr::include_graphics("Workflow.png")
+```
+
+
+## Scenario Analysis
+The study explores the impact of adding six machines distributed across the moulding and packaging stages in different combinations (e.g., 1 for moulding and 5 for packaging, 2 and 4, up to 5 and 1). Each scenario ensures that both stages receive at least one additional machine. A key cost factor examined is the delay between moulding and inspection, with each minute of waiting incurring a degradation cost of £150.
+
+## Performance Metrics
+The simulation focuses on two key metrics:
+
+- **Average waiting time** at each stage, calculated as the difference between the total time spent in the system and the processing time at that stage (waiting time = end time – start time – activity time).
+
+- **Average degradation cost** due to delays between moulding and inspection. 
+
+## Assumptions & Simplifications
+To streamline the analysis and deliver insights within the project timeframe, several assumptions and simplifications were made:
+
+- The system operates continuously in a steady state, where long-term performance remains stable.
+
+- The system's performance is evaluated after an initial warm-up period to ensure stable and representative results. Ideally, each simulation run would have its warm-up period. However, due to time constraints, a single warm-up period—estimated from a one-replication run—was applied to all replications. This approach is supported by Law (2015, pp. 511–523), who notes that when the system’s stochastic behaviour is consistent across replications, a common warm-up period can be used effectively.
+
+- Historical order data was used to reflect country-based demand proportions, which are assumed to remain constant over time. Additionally, all orders are assumed to be received and fulfilled on the same day, regardless of the actual timeline in the historical dataset.
+
+- The waiting time between moulding and inspection is measured as the waiting time at the inspection stage.
+
+- Machines are assumed to be always available, with no breakdowns, set-up times, or maintenance interruptions.
+
+- Raw materials and staffing are considered unlimited, removing external supply and labour constraints.
+
+- All queues follow a First-Come-First-Served policy, and products are processed individually—no batching is involved.
+
+- The cost of acquiring and installing the six additional machines used in scenario analysis is not considered as part of the cost reduction strategy. This financial aspect is beyond the scope of the current study and is therefore excluded from the simulation and conclusions.
+
+# Data Collection and Preparation
+The accuracy and reliability of any discrete-event simulation (DES) depend largely on the quality and relevance of the input data. This study used a sample of ABC Co.’s historical order records to analyse ordering patterns across its four customer regions: Chile, Morocco, Portugal, and Greece.
+
+```{r}
+# Load data
+data <- read_csv("Data.csv")
+
+# Preview the first few rows
+knitr::kable(
+  head(data),
+  caption = "Preview of the sample of ABC Co.’s historical order records"
+)
+
+# Show summary statistics
+summary(data)
+```
+
+To prepare the data for analysis, the order `Date` field—stored initially as a text string—was converted to a standard date format to enable time-based insights. 
+
+```{r}
+# Load date-handling library
+library(lubridate)
+
+# Clean and format the Date column, then sort the data
+data <- data |>
+  mutate(Date = dmy(gsub("^[A-Za-z]+, ", "", Date))) |>
+  arrange(Date)
+
+# Generate a detailed data description
+Hmisc::describe(data)
+```
+
+An initial exploratory analysis (Figure \@ref(fig:f2)) revealed that Portugal and Greece together account for over 60% of total orders, while Chile represents just 13%.
+
+```{r f2, fig.cap="Order proportions per country."}
+ggplotly(
+  data |>
+    count(From) |>
+    mutate(prop = n / sum(n)) |>
+    mutate(From = fct_reorder(From, prop, .desc = TRUE)) |>
+    ggplot(aes(x = From, y = prop, group = 1)) +
+    geom_bar(stat = "identity", fill = "steelblue") +
+    labs(
+      title = "Proportion of Orders per Country",
+      x = "",
+      y = ""
+    ) +
+    theme_tufte(base_family = "Helvetica") +
+    theme(
+      plot.title = element_text(hjust = 0.5),
+      legend.position = "top",
+      axis.text.x = element_text(angle = 45, hjust = 1, size = 9)
+    ) +
+    scale_y_continuous(labels = scales::percent) +
+    scale_fill_brewer(palette = "Blues", direction = -1) +
+    scale_color_manual(values = c("darkblue", "blue", "royalblue"))
+) |>
+  layout(
+    annotations = list(
+      text = "Hover over the plot for details",
+      x = 0.5,
+      y = 1.05,
+      xref = "paper",
+      yref = "paper",
+      showarrow = FALSE,
+      font = list(size = 12, family = "Helvetica")
+    )
+  )
+```
+
+Monthly trends (Figure \@ref(fig:f3)) showed consistent order activity across time, with only occasional gaps for specific countries, confirming the dataset’s reliability for modelling purposes.
+
+```{r f3, fig.cap="Distribution of orders per date and country."}
+ggplotly(
+  data |>
+    mutate(year_month = format(Date, "%Y-%m")) |>  # Extract Year-Month
+    ggplot(aes(x = year_month)) +
+      geom_bar(fill = "steelblue") +
+      facet_wrap(~ From) +
+      labs(
+        title = "Orders per Country",
+        x = "Year-Month",
+        y = "Count of Orders"
+      ) +
+      theme_tufte(base_family = "Helvetica") +
+      theme(
+        plot.title = element_text(hjust = 0.5),
+        legend.position = "top",
+        axis.text.x = element_text(angle = 90, hjust = 1, size = 5)
+      ) +
+      scale_fill_brewer(palette = "Blues", direction = -1) +
+      scale_color_manual(values = c("darkblue", "blue", "royalblue"))
+) |>
+  layout(
+    annotations = list(
+      text = "Hover over the plot for details",
+      x = 0.5,
+      y = 1.075,
+      xref = "paper",
+      yref = "paper",
+      showarrow = FALSE,
+      font = list(size = 12, family = "Helvetica")
+    )
+  )
+```
+
+Due to the limited scope of the historical dataset—primarily order dates and countries of origin—synthetic data was generated to support a robust simulation. This included:
+
+- Order arrivals, modelled using a normal distribution (mean: 0.6 minutes, standard deviation: 0.1 minutes), in line with observed historical patterns.
+
+- Processing times for each production stage, sampled from exponential distributions specific to each country.
+
+```{r}
+# Function to generate simulated orders with processing times
+generate_orders <- function(data, production_parameters) {
+  
+  # Generate arrival times
+  orders <- data |>
+    mutate(ArrivalTime = rnorm(n(), mean = 0.6, sd = 0.1))
+  
+  # Merge with production parameters
+  orders <- orders |>
+    left_join(production_parameters, by = c("From" = "Country"))
+  
+  # Simulate processing times for each stage
+  orders <- orders |>
+    mutate(
+      MouldingTime   = rexp(n(), rate = 1 / Moulding),
+      InspectionTime = rexp(n(), rate = 1 / Inspection),
+      PackagingTime  = rexp(n(), rate = 1 / Packaging)
+    ) |>
+    dplyr::select(-Moulding, -Inspection, -Packaging) |>
+    arrange(Date)
+  
+  return(orders)
+}
+
+# Generate a sample of orders
+set.seed(123)
+orders_generated_sample <- generate_orders(data, production_parameters)
+
+# Display and summarise the sample
+knitr::kable(head(orders_generated_sample), caption = "Preview of the Generated Orders")
+summary(orders_generated_sample)
+```
+
+To validate the generated data, visual checks (Figure \@ref(fig:f4)) confirmed the stability of arrival intervals.
+
+```{r f4, fig.cap="Normal distribution fit of generated arrival times."}
+# Check if arrival times follow a normal distribution
+ggplot(orders_generated_sample, aes(x = ArrivalTime)) +
+  geom_histogram(aes(y = ..density..), bins = 30, fill = "steelblue", alpha = 0.5) +
+  stat_function(
+    fun = dnorm,
+    args = list(mean = 0.6, sd = 0.1),
+    color = "red"
+  ) +
+  labs(
+    title = "Generated Arrival Times vs Normal Distribution Fit",
+    x = "Minutes",
+    y = "Density"
+  ) +
+  theme_tufte(base_family = "Helvetica") +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    legend.position = "right",
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+```
+
+Furthermore, additional comparisons (Figure \@ref(fig:f5)) verified generated processing times against known parameters.
+
+```{r f5, fig.cap="Exponential distribution fit of generated moulding times."}
+# Check if moulding times follow an exponential distribution
+ggplot(orders_generated_sample, aes(x = MouldingTime)) +
+  geom_histogram(aes(y = ..density..), bins = 30, fill = "steelblue", alpha = 0.5) +
+  stat_function(
+    fun = dexp,
+    args = list(rate = 1 / mean(orders_generated_sample$MouldingTime)),
+    color = "red"
+  ) +
+  labs(
+    title = "Generated Moulding Times vs Exponential Fit",
+    x = "Minutes",
+    y = "Density"
+  ) +
+  theme_tufte(base_family = "Helvetica") +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    legend.position = "right",
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+```
+
+This modelling approach accurately reflects ABC Co.’s operational dynamics while enabling a flexible simulation environment. It supports confident scenario testing and provides a solid foundation for making informed, data-driven operational decisions.
+
+# Simulation Model
+
+The simulation model replicates ABC Co.’s production process using a queueing-based approach for each stage: moulding, inspection, and packaging. Each stage is modelled as an M/M/c queue, where c represents the number of servers (i.e., machines) operating at that stage. The system includes 10 moulding machines, 9 inspection tables, and 9 packaging machines in the current configuration.
+
+Processing times—already generated using exponential distributions with country-specific parameters—are integrated into the simulation logic to reflect real-time variability in production times. 
+
+The primary goal of the simulation is to estimate average waiting times at each stage, factoring in machine availability and queuing delays.
+
+```{r}
+library(skimr)
+
+moulding_machine = 10 
+inspection_table = 9 
+packaging_machine = 9
+
+# Simulation function
+simulate_plant <- function(orders, n_moulding = moulding_machine, n_inspection = inspection_table, n_packaging = packaging_machine) {
+  
+  # Create the simulation environment
+  env <- simmer("SolCo Plant")
+  
+  # Add resources
+  env |>
+    add_resource("Moulding", capacity = n_moulding) |>
+    add_resource("Inspection", capacity = n_inspection) |>
+    add_resource("Packaging", capacity = n_packaging)
+  
+  # Define the trajectory (process flow)
+  traj <- trajectory("Order Process") |>
+    seize("Moulding", 1) |>
+    timeout_from_attribute("moulding_time") |>
+    release("Moulding", 1) |>
+    
+    seize("Inspection", 1) |>
+    timeout_from_attribute("inspection_time") |>
+    release("Inspection", 1) |>
+    
+    seize("Packaging", 1) |>
+    timeout_from_attribute("packaging_time") |>
+    release("Packaging", 1)
+
+  # Prepare arrival data with processing time attributes
+  arrival_data <- orders |>
+    transmute(
+      time = ArrivalTime,
+      moulding_time = MouldingTime,
+      inspection_time = InspectionTime,
+      packaging_time = PackagingTime
+    )
+
+  # Add a single generator using add_dataframe (efficient)
+  env |>
+    add_dataframe("order", traj, arrival_data, mon = 2) |>
+    run()
+  
+  return(env)
+}
+
+# run simulation with 1 replication
+set.seed(123)
+orders <- generate_orders(data, production_parameters)
+env <- simulate_plant(orders)
+# Print results
+initial_simulation_results <- get_mon_arrivals(env) |> 
+  arrange(start_time) |>  # Order by start_time
+  mutate(waiting_time = end_time - activity_time - start_time) 
+
+# Display preview
+knitr::kable(
+  head(initial_simulation_results),
+  caption = "Preview of the Initial Simulation (1 replication)"
+)
+```
+
+To ensure meaningful performance insights, it is crucial to exclude the initial “start-up” phase of the simulation, where results may not yet be stable. This period, known as the warm-up period, allows the system to reach a steady state before performance metrics are recorded.
+
+While the ideal method involves calculating a unique warm-up period for each simulation run, a single warm-up value was used for all runs to streamline analysis. This value was determined using the marginal standard error rule (MSER), applied to a baseline simulation with one replication. This approach is accepted by Law (2015, pp. 511–523) when the system’s stochastic behaviour is consistent across runs, offering a practical balance between accuracy and efficiency.
+
+As shown in Figure \@ref(fig:f6), the system stabilises after the first 280 orders. Based on the MSER heuristic, these initial orders are excluded from the performance analysis to avoid skewed results.
+
+```{r message=FALSE, f6, fig.cap="Identifying warm-up orders using MSER heuristic."}
+# Compute MSER for each truncation point
+compute_mser <- function(data) {
+  n <- length(data)
+  mser_values <- numeric(n / 2)
+  
+  for (i in 1:(n / 2)) {
+    truncated <- data[i:n]
+    mser_values[i] <- sd(truncated) / mean(truncated)
+  }
+  
+  return(mser_values)
+}
+
+# Apply MSER heuristic to waiting times
+mser_values <- compute_mser(initial_simulation_results$waiting_time)
+warmup_mser <- which.min(mser_values)
+
+# Prepare data for plotting
+mser_df <- data.frame(
+  Order = 1:length(mser_values),
+  MSER  = mser_values
+)
+
+# Plot MSER values with warm-up indicator
+ggplotly(
+  ggplot(mser_df, aes(x = Order, y = MSER)) +
+    geom_line(colour = "steelblue", alpha = 0.5) +
+    geom_vline(xintercept = warmup_mser, colour = "steelblue", linetype = "dashed") +
+    annotate(
+      "text",
+      x = warmup_mser,
+      y = max(mser_values),
+      label = paste("Warm-up at Order", warmup_mser),
+      colour = "steelblue",
+      hjust = -5.5
+    ) +
+    labs(
+      title = "MSER Heuristic for Warm-up Period",
+      x = "Order",
+      y = "MSER Value"
+    ) +
+    theme_tufte(base_family = "Helvetica") +
+    theme(
+      plot.title = element_text(hjust = 0.5),
+      legend.position = "top",
+      axis.text.x = element_text(angle = 45, hjust = 1)
+    ) 
+)|>
+  layout(
+    annotations = list(
+      text = "Hover over the plot for details",
+      x = 0.5,
+      y = 1.05,
+      xref = "paper",
+      yref = "paper",
+      showarrow = FALSE,
+      font = list(size = 12, family = "Helvetica")
+    )
+  )
+```
+
+Due to the randomness in both order arrivals and processing times, multiple independent replications are required to obtain statistically reliable results. To determine an appropriate number of replications, cumulative mean waiting times were analysed to assess when performance metrics stabilised.
+
+```{r}
+# ---- Parameters ----
+set.seed(42)                # For reproducibility
+z <- 1.96                   # 95% confidence
+w <- 0.2                    # Desired half-width of CI
+min_reps <- 100              # Minimum replications before estimating
+results <- c()              # To store results
+max_reps <- 500             # Safety stop
+
+# ---- Loop to determine required replications ----
+repeat {
+  orders <- generate_orders(data, production_parameters)
+  
+  # Simulate environment
+  env <- simulate_plant(orders)
+
+  # Get arrivals and calculate waiting time per order (post-warmup)
+  arrivals <- get_mon_arrivals(env, per_resource = TRUE) |>
+    mutate(
+    waiting_time = round(end_time - activity_time - start_time, 2),
+    order_id = parse_number(name)) |>
+  group_by(replication) |>
+  arrange(start_time, .by_group = TRUE) |>
+  filter(order_id > warmup_mser) |>
+  ungroup()
+
+  # Calculate mean waiting time (only if arrivals exist)
+  if (nrow(arrivals) == 0) {
+    result <- NA
+  } else {
+    result <- mean(arrivals$waiting_time, na.rm = TRUE)
+  }
+
+  # Store result
+  results <- c(results, result)
+
+  # Check if enough clean results to estimate required replications
+  if (length(results) >= min_reps) {
+    s <- sd(results)
+    mean_val <- mean(results)
+    n_needed <- ceiling((z * s / w)^2)
+
+    if (length(results) >= n_needed || length(results) >= max_reps) {
+      break
+    }
+  }
+}
+
+# ---- Final Output ----
+cat(paste(
+  " Final replications used:", length(results), "\n",
+  "Mean waiting time:", round(mean(results), 3), "\n",
+  "95% CI Half-width:", round((z * sd(results)) / sqrt(length(results)), 3), "\n"
+))
+```
+
+Figure \@ref(fig:f7) shows that cumulative mean waiting times stabilised after approximately 50 replications, indicating that further replications would have minimal impact on result accuracy. 
+
+```{r f7, fig.cap="Cumulative average waiting time across replications."}
+# Build cumulative statistics over replications
+ci_data <- data.frame(
+  Replication = seq_along(results),
+  MeanWaitingTime = results
+) |>
+  mutate(
+    CumulativeMean = cummean(MeanWaitingTime),
+    SD = sapply(1:n(), function(i) if (i > 1) sd(MeanWaitingTime[1:i]) else 0),
+    CI_HalfWidth = 1.96 * SD / sqrt(Replication),
+    LowerCI = CumulativeMean - CI_HalfWidth,
+    UpperCI = CumulativeMean + CI_HalfWidth
+  )
+
+# Plot convergence of average waiting time
+ggplotly(
+  ggplot(ci_data, aes(x = Replication)) +
+    geom_line(aes(y = CumulativeMean), color = "steelblue", size = 0.7) +
+    geom_ribbon(aes(ymin = LowerCI, ymax = UpperCI), alpha = 0.2, fill = "steelblue") +
+    geom_vline(xintercept = 50, colour = "steelblue", linetype = "dashed") +
+    labs(
+      title = "Convergence of Average Waiting Time Across Replications",
+      x = "Number of Replications",
+      y = "Cumulative Average Waiting Time",
+      caption = "Shaded area = 95% Confidence Interval"
+    ) +
+    theme_tufte(base_family = "Helvetica") +
+    theme(
+      plot.title = element_text(hjust = 0.5),
+      legend.position = "right",
+      axis.text.x = element_text(angle = 45, hjust = 1)
+    )
+) |>
+  layout(
+    annotations = list(
+      text = "Hover over the plot for details",
+      x = 0.5,
+      y = 1.05,
+      xref = "paper",
+      yref = "paper",
+      showarrow = FALSE,
+      font = list(size = 12, family = "Helvetica")
+    )
+  )
+```
+
+To ensure robustness, the simulation performed 50 independent replications, providing sufficient statistical confidence in the reported performance measures.
+
+```{r}
+# Run multiple replications and track arrivals
+set.seed(42)
+n_reps <- 50
+
+rep_arrivals <- lapply(1:n_reps, function(i) {
+  orders <- generate_orders(data, production_parameters)
+  env <- simulate_plant(orders)
+
+  get_mon_arrivals(env, per_resource = TRUE) |>
+    mutate(replication = i) |>
+    mutate(
+      waiting_time = round(end_time - activity_time - start_time, 2),
+      order_id = parse_number(name)
+    ) |>
+    group_by(replication) |>
+    arrange(start_time, .by_group = TRUE) |>
+    filter(order_id > warmup_mser) |>
+    ungroup()
+})
+
+# Combine results from all replications
+all_arrivals <- bind_rows(rep_arrivals)
+
+# Summary output
+cat("Replications tracked:", length(unique(all_arrivals$replication)), "\n")
+
+# Preview of simulation results
+knitr::kable(
+  head(all_arrivals),
+  caption = "Preview of the Simulation Results (50 replications, excluding warm-up orders"
+)
+```
+
+# Verification & Validation
+
+## Verification
+
+Verification ensures the simulation model was developed and implemented correctly, according to the intended design and logic. The model was built using the simmer package in R and carefully reviewed to confirm that it accurately reflects ABC Co.’s real-world production process—moving through the three stages of moulding, inspection, and packaging.
+
+Each stage was programmed as an M/M/c queue, ensuring that:
+
+- Resources are correctly seized before processing begins,
+
+- Processing times follow the specified country-based exponential distributions,
+
+- Resources are released in the proper sequence after completion.
+
+A sample of simulated orders was manually traced through the system to verify the correct model behaviour. This confirmed that:
+
+- Order arrivals matched the intended normal distribution,
+
+- Stage durations reflected the country-specific exponential patterns,
+
+- The flow of products between stages was uninterrupted and logically consistent.
+
+In addition, key performance indicators—such as waiting times, queue lengths, and machine utilisation—were tested under both normal and extreme load conditions to ensure the system responded in a stable and predictable manner.
+
+## Validation
+
+Validation evaluates whether the model accurately represents the real-world system or provides a sound approximation based on theoretical expectations. In the absence of detailed operational data for ABC Co., validation was carried out using a combination of statistical checks and theoretical comparisons.
+
+First, the warm-up period was validated by confirming that the first 280 orders were excluded from each simulation run (Figure \@ref(fig:f8), ensuring performance metrics were only calculated once the system had reached a stable state.
+
+```{r f8, fig.cap="Orders considered in the simulation output."}
+# Plot start time by order ID with warm-up cutoff indicator
+ggplot(all_arrivals, aes(x = order_id, y = start_time)) +
+  geom_point(color = "lightblue", size=0.2) +
+  geom_vline(xintercept = warmup_mser, color = "steelblue", linetype = "dashed") +
+  annotate(
+    "text",
+    x = warmup_mser,
+    y = 600,
+    label = paste("Order", warmup_mser),
+    colour = "steelblue",
+    hjust = 0
+  ) +
+  labs(
+    title = "Orders From the Simulation Output",
+    x = "Order ID",
+    y = "Start Time"
+  ) +
+  theme_tufte(base_family = "Helvetica") +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    legend.position = "right",
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+```
+
+Having the correct implementation of input parameters, we then verified that the simulated activity times closely followed their intended exponential distributions (Figure \@ref(fig:f9)).
+
+```{r f9, fig.cap="Exponential fit of simulated activity times."}
+# Check if activity times follow an exponential distribution
+ggplot(all_arrivals, aes(x = activity_time)) +
+  geom_histogram(aes(y = ..density..), bins = 30, fill = "steelblue", alpha = 0.5) +
+  stat_function(
+    fun = dexp,
+    args = list(rate = 1 / mean(all_arrivals$activity_time)),
+    color = "red"
+  ) +
+  labs(
+    title = "Simulated Activity Times vs Exponential Fit",
+    x = "Minutes",
+    y = "Density"
+  ) +
+  theme_tufte(base_family = "Helvetica") +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    legend.position = "right",
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+```
+
+To validate the model’s output, simulated performance metrics—such as average waiting times at the inspection stage—were compared with theoretical values derived from standard M/M/c queuing models.
+
+```{r}
+# Load queueing analysis library
+library(queueing)
+
+# Summarise simulation results by stage
+summary_table <- all_arrivals |>
+  group_by(resource) |>
+  summarize(
+    "Avg Waiting"  = round(mean(waiting_time), 2),
+    "Max Waiting"  = round(max(waiting_time), 2),
+    "Total Orders" = n(),
+    .groups = "drop"
+  )
+
+# Define parameters
+Mean_IAT        <- 0.6  # Mean inter-arrival time
+Mean_Inspection <- mean(production_parameters$Inspection)  # Mean service time for Inspection
+
+# Theoretical queueing model for Inspection stage (multi-server)
+i_mm1 <- NewInput.MMC(lambda = 1 / Mean_IAT, mu = 1 / Mean_Inspection, c = inspection_table)
+model <- QueueingModel(i_mm1)
+
+# Compare simulated and theoretical waiting times
+cat(paste(
+  " Simulated Mean Waiting Time in Inspection:", summary_table$`Avg Waiting`[1], "minutes\n",
+  "Theoretical Mean Waiting Time in Inspection Queue (Wq):", round(model$Wq, 2), "minutes\n"
+))
+```
+
+The simulated average waiting time (0.1 minutes) was close to the theoretical expectation (0.15 minutes), with minor differences attributed to the variability introduced by the mix of country-specific parameters. This confirms the model realistically captures queuing behaviour.
+
+Finally, Figure \@ref(fig:f10) shows that the distribution of simulated processing times closely matches the expected exponential shape, with a slightly heavier tail. This variation is anticipated due to the combination of different exponential distributions across countries, and it reflects the complexity of real-world operations.
+
+```{r f10, fig.cap="Q-Q plot comparing simulated activity times to a theoretical exponential distribution."}
+# Simulated activity times from the simulation
+simulated_activity_times <- all_arrivals$activity_time
+
+# Theoretical exponential quantiles
+theoretical_quantiles <- qexp(
+  ppoints(length(simulated_activity_times)),
+  rate = 1 / mean(simulated_activity_times)
+)
+
+# Q-Q plot to assess exponential fit
+qqplot(
+  theoretical_quantiles,
+  sort(simulated_activity_times),
+  main = "Q-Q Plot: Simulated Activity Times vs Exponential Distribution",
+  xlab = "Theoretical Exponential Quantiles",
+  ylab = "Simulated Activity Times",
+  col = "steelblue"
+)
+abline(0, 1, col = "red", lwd = 1)  # Reference line
+```
+
+Together, these verification and validation steps confirm that the simulation model is both technically sound and a reliable tool for analysing ABC Co.’s production system under different resource configurations.
+
+# Key Results
+
+The simulation results offer valuable insights into ABC Co.’s current production system performance.
+
+As shown in Figure \@ref(fig:f11), the system reaches a steady state relatively quickly, with stable resource usage after the warm-up period. The system successfully processed 1,000 orders in just over 600 minutes, confirming a strong throughput rate under the current configuration. Server usage averaged around 6.5 in moulding, 5.5 in inspection, and 6 in packaging, suggesting that the current resource allocation effectively maintains smooth operations.
+
+```{r f11, fig.cap="Resource usage during the initial simulation (1 replication, including warm-up period)."}
+# Track resource usage across multiple replications
+set.seed(42)
+
+rep_resources <- lapply(1:n_reps, function(i) {
+  orders <- generate_orders(data, production_parameters)
+  env <- simulate_plant(orders)
+
+  get_mon_resources(env) |>
+    mutate(replication = i)
+})
+
+# Combine results from all replications
+all_resources <- bind_rows(rep_resources)
+
+# Plot resource usage
+plot(all_resources)
+```
+
+Waiting times across stages remained relatively low (Figure \@ref(fig:f12)). Moulding had the shortest average wait (0.04 minutes), followed by inspection (0.10 minutes), while packaging had the highest (0.15 minutes). 
+
+```{r f12, fig.cap="Average waiting time per stage (50 replications, excluding warm-up orders)."}
+# Interactive bar chart of average waiting times per stage
+ggplotly(
+  summary_table |>
+    dplyr::select(resource, `Avg Waiting`) |>
+    mutate(resource = factor(resource, levels = c("Moulding", "Inspection", "Packaging"))) |>
+    ggplot(aes(x = resource, y = `Avg Waiting`)) +
+      geom_col(fill = "steelblue") +
+      labs(
+        title = "Average Waiting Time per Stage",
+        x = "",
+        y = "Minutes"
+      ) +
+      theme_tufte(base_family = "Helvetica") +
+      theme(
+        plot.title = element_text(hjust = 0.5),
+        legend.position = "none",
+        axis.text.x = element_text(angle = 45, hjust = 1, size = 9)
+      )
+) |>
+  layout(
+    annotations = list(
+      text = "Hover over the plot for details",
+      x = 0.5,
+      y = 1.05,
+      xref = "paper",
+      yref = "paper",
+      showarrow = FALSE,
+      font = list(size = 12, family = "Helvetica")
+    )
+  )
+```
+
+While most orders were processed with minimal delay, occasional spikes in waiting times were observed, especially in inspection and packaging (Figure \@ref(fig:f13)), where delays occasionally exceeded 5 minutes. Among the three stages, packaging showed the highest tendency for queuing, indicating it could become a bottleneck under increased demand.
+
+Although inspection generally performs well, it remains critical due to its direct link to degradation costs when delays occur after moulding. Therefore, ongoing monitoring of this stage is essential from an operational and financial perspective.
+
+```{r f13, fig.cap="Distribution of waiting times per stage (50 replications, excluding warm-up orders)."}
+# Interactive histogram of waiting times by stage
+ggplotly(
+  all_arrivals |>
+    mutate(resource = factor(resource, levels = c("Moulding", "Inspection", "Packaging"))) |>
+    ggplot(aes(x = waiting_time)) +
+      geom_histogram(binwidth = 1, fill = "steelblue", color = "white") +
+      facet_wrap(~resource, scales = "free_y") +
+      labs(
+        title = "Distribution of Waiting Times per Stage",
+        x = "Minutes",
+        y = "Frequency"
+      ) +
+      theme_tufte(base_family = "Helvetica") +
+      theme(
+        plot.title = element_text(hjust = 0.5),
+        legend.position = "right",
+        axis.text.x = element_text(angle = 45, hjust = 1)
+      )
+) 
+```
+
+The system effectively meets current demand levels with balanced resource usage and manageable wait times. However, packaging may require reinforcement in future high-demand scenarios, and inspection should remain a focus area due to its cost sensitivity. The simulation model has proven to be a reliable tool for evaluating system performance and will serve as a solid foundation for future scenario analysis and operational planning.
+
+# Scenario Analysis
+
+A scenario analysis was conducted to explore how strategic investment in additional equipment could improve operational efficiency and reduce costs. 
+
+The study focused on adding six new machines to ABC Co.’s production system, to optimise their distribution between the moulding and packaging stages. Each scenario ensured that both stages received at least one machine.
+
+The five configurations tested were:
+
+- (1,5) – 1 additional moulding machine, 5 packaging machines
+
+- (2,4)
+
+- (3,3)
+
+- (4,2)
+
+- (5,1) – 5 additional moulding machines, 1 packaging machine
+
+The primary objective of this analysis was to minimise degradation costs, which occur when products are delayed between the moulding and inspection stages. Based on the simulation model, these delays are captured by the waiting time at the inspection stage. Every minute of delay translates into a degradation cost of £150 per product.
+
+```{r}
+degradation_cost_per_minute = 150
+
+degradation_data <- all_arrivals |>
+  filter(resource=="Inspection" & waiting_time > 0) |>
+  dplyr::select(order_id, replication, resource, waiting_time) |>
+  mutate(degradation_cost = waiting_time * degradation_cost_per_minute)
+
+cat(paste("Average degradation cost with the default set-up of 10 moulding and 9 packaging machines: £", round(mean(degradation_data$degradation_cost),2)))
+```
+
+Each configuration was tested using 50 independent simulation runs, with the first 280 orders excluded from analysis in each run to ensure the system had reached a steady state. For each scenario, the average degradation cost was calculated by multiplying waiting time at inspection by the £150/minute penalty.
+
+```{r}
+start_time <- Sys.time()
+
+# Set seed for reproducibility
+set.seed(42)
+
+# Function to simulate experiments across different machine configurations
+simulate_experiments <- function(orders, machine_combinations, n_replications = n_reps) {
+  results <- list()
+  
+  for (combo in machine_combinations) {
+    replication_costs <- numeric(n_replications)
+    
+    for (rep in 1:n_replications) {
+      # Create simulation environment with adjusted resource capacities
+      env <- simmer("SolCo Plant") |>
+        add_resource("Moulding", capacity = moulding_machine + combo[1]) |>
+        add_resource("Inspection", capacity = inspection_table) |>
+        add_resource("Packaging", capacity = packaging_machine + combo[2])
+      
+      # Define process trajectory
+      traj <- trajectory("Order Process") |>
+        seize("Moulding", 1) |>
+        timeout_from_attribute("moulding_time") |>
+        release("Moulding", 1) |>
+        seize("Inspection", 1) |>
+        timeout_from_attribute("inspection_time") |>
+        release("Inspection", 1) |>
+        seize("Packaging", 1) |>
+        timeout_from_attribute("packaging_time") |>
+        release("Packaging", 1)
+      
+      # Generate order data
+      orders <- generate_orders(data, production_parameters)
+      arrival_data <- orders |>
+        transmute(
+          time = ArrivalTime,
+          moulding_time = MouldingTime,
+          inspection_time = InspectionTime,
+          packaging_time = PackagingTime
+        )
+      
+      # Run simulation
+      env |>
+        add_dataframe("order", traj, arrival_data, mon = 2) |>
+        run()
+      
+      # Extract arrivals and compute cost
+      arrivals <- get_mon_arrivals(env, per_resource = TRUE) |>
+        mutate(
+          waiting_time = round(end_time - activity_time - start_time, 2),
+          order_id = parse_number(name)
+        ) |>
+        arrange(start_time, .by_group = TRUE) |>
+        filter(order_id > warmup_mser) |>
+        filter(resource == "Inspection" & waiting_time > 0)
+      
+      replication_costs[rep] <- mean(arrivals$waiting_time, na.rm = TRUE) * degradation_cost_per_minute
+    }
+    
+    # Store average cost for each configuration
+    results[[paste(combo[1], combo[2], sep = ",")]] <- tibble(
+      moulding_machines   = moulding_machine + combo[1],
+      packaging_machines  = packaging_machine + combo[2],
+      cost                = mean(replication_costs, na.rm = TRUE)
+    )
+  }
+  
+  return(bind_rows(results))
+}
+
+# Define machine configurations to test
+machine_combinations <- list(
+  c(1, 5), c(2, 4), c(3, 3), c(4, 2), c(5, 1)
+)
+
+# Run experiments
+experiment_results <- simulate_experiments(orders, machine_combinations, n_replications = n_reps)
+
+end_time <- Sys.time()
+execution_time <- round(difftime(end_time, start_time, units = "secs"), 2)
+
+cat(paste("Simulation completed in", execution_time, "seconds."))
+```
+
+Figure \@ref(fig:f14) shows that among the five tested configurations, only the (1,5) set-up—with one machine added to moulding and five to packaging—achieved better results than the current system. This scenario delivered the lowest average degradation cost, at £120.29, confirming that expanding packaging capacity is the most effective way to reduce delays after moulding.
+
+``` {r f14, fig.cap="Average degradation costs across machine combinations."}
+# Load color palette library
+library("RColorBrewer")
+
+# Heatmap of average degradation cost by machine combination
+ggplot(experiment_results, aes(x = moulding_machines, y = packaging_machines, fill = cost)) +
+  geom_tile() +
+  geom_text(aes(label = round(cost, 2)), color = "white", size = 5) +
+  scale_fill_gradientn(colors = c("#66C2A5", "#FED976", "#F4A582")) +
+  labs(
+    title = "Average Degradation Cost (£) per Machine Combination",
+    x = "Number of Moulding Machines",
+    y = "Number of Packaging Machines",
+    fill = "Average Cost (£)"
+  ) +
+  theme_tufte(base_family = "Helvetica") +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    legend.position = "none",
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+```
+
+In contrast, other configurations failed to improve performance and even increased degradation costs. This reinforces the insight that inspection delays are more sensitive to packaging constraints than to moulding capacity.
+
+This scenario analysis demonstrates the value of simulation-based planning. By modelling different capacity expansion strategies, ABC Co. can allocate resources where they generate the greatest financial return and operational impact, while avoiding ineffective investments. The findings strongly support prioritising packaging capacity as the most cost-effective solution for reducing degradation-related losses.
+
+# Conclusions 
+
+The simulation study confirms that ABC Co.’s current production system operates efficiently under standard conditions, with stable resource utilisation and generally low average waiting times across all three stages. The current set-up can process 1,000 orders in slightly more than 600 minutes. However, variability in arrival and processing times can cause occasional waiting spikes, particularly at the packaging stage. While inspection delays are less frequent, they remain critical due to the degradation cost of £150 per minute.
+
+Scenario analysis showed that only one configuration—adding 1 moulding machine and 5 packaging machines—outperformed the current set-up by reducing degradation costs. All other tested allocations either had no impact or worsened performance.
+
+These findings underscore the importance of strategic capacity planning, particularly when investment decisions aim to reduce inspection delays and degradation costs.
+
+# Recomendations
+
+Based on the simulation findings, the following recommendations are proposed to improve operational performance and reduce costs:
+
+1. **Prioritise monitoring of the inspection stage.** Although average performance at the inspection stage is relatively strong, any delay here leads directly to product degradation and increased costs. Real-time monitoring can help detect and respond to queue build-ups promptly, preventing quality issues and unnecessary expenses.
+
+2. **Reinforce packaging capacity.** Packaging exhibited the highest average and peak waiting times across all stages, making it the most likely bottleneck under increased demand. Adding equipment or optimising operational processes at this stage should be considered to maintain system flow and avoid downstream delays.
+
+3. **Adopt the (1 Moulding, 5 Packaging) expansion strategy.** Scenario analysis identified this configuration as the only configuration that outperformed the current set-up, delivering the lowest average degradation cost. If six new machines are to be added, this distribution should be prioritised to maximise operational and financial benefit.
+
+4. **Continue refining the simulation model.** The current validated model provides a solid framework for future decision-making. As new data becomes available—whether from shifts in demand, changes in product mix, or updated production practices—it should be integrated to maintain the model’s accuracy and relevance.
+
+5. **Incorporate detailed operational data for continuous improvement.** More granular data such as machine downtimes, maintenance schedules, and labour constraints can be incorporated to enhance the model's precision further. Regular updates will ensure the model remains a valuable tool for ongoing performance analysis and strategic planning.
+
+# References
+
+Law, A. (2015). *Simulation Modeling and Analysis.* Fifth edition. New York: McGraw-Hill Education. Available at: https://industri.fatek.unpatti.ac.id/wp-content/uploads/2019/03/108-Simulation-Modeling-and-Analysis-Averill-M.-Law-Edisi-5-2014.pdf (Accessed: 28 March 2025)
+
+# Appendix 1: Session Info
+
+```{r}
+# This command provides detailed information about the current R session, including the version of R, the operating system, and the list of loaded packages along with their versions. It is useful for checking compatibility of packages and diagnosing issues with installed software.
+sessionInfo()
+```
