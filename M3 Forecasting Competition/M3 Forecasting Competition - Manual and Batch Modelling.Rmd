@@ -1,9 +1,9 @@
 ---
-title: "Time Series Forecasting - M3 Forecasting Competition Data"
-author: YLG
-date: "`r format(Sys.Date(), '%B %d, %Y')`"
+title: "Time Series Forecasting - M3 Competition"
+author: Yulia Lopatina
 output:
   bookdown::html_document2:
+    css: styles.css
     toc: true
     theme: cerulean
     highlight: monochrome
@@ -15,7 +15,7 @@ output:
 editor_options:
   chunk_output_type: inline
 fontsize: 12pt 
-fontfamily: Helvetica  
+fontfamily: Aeonik  
 geometry: "width=90%" 
 ---
 
@@ -71,17 +71,17 @@ In this section, we focus on series ID 1394 from the M3 forecasting competition,
 frequency <- 4
 data <- M3[[1394]]
 data <- subset(data, frequency == frequency)
+
+# Assign the historical data to a variable for training the model
+training_data <- data$x
+
+# Assign the future data points for testing the model's predictions
+test_data <- data$xx
+
 { cat("M3 competition series ID 1394\n"); print(data) }
 ```
 
 Within the context of the M3 competition data set, ‘x’ serves as the historical (a.k.a. training) time series data from 1962 to 1973, which is used to develop and calibrate forecasting models, while ‘xx’ acts as the future (a.k.a. test) data set from 1974 to 1975, which is used to evaluate the performance and accuracy of the models’ predictions.
-
-```{r echo = FALSE}
-# Assign the historical data to a variable for training the model
-training_data <- data$x
-# Assign the future data points for testing the model's predictions
-test_data <- data$xx
-```
 
 Producing a time series plot of the historical data (Figure \@ref(fig:f1)) and its summary will help gain insights into the data’s characteristics.
 
@@ -92,7 +92,7 @@ autoplot(training_data,
          xlab = "Year",      
          ylab = "Unemployment",  
          main = "Quarterly unemployment in Canada in 1962-1973 (Series ID 1394)") +
-    theme_tufte(base_family = "Helvetica") +                 
+    theme_tufte(base_family = "Aeonik") +                 
     theme(
       plot.title = element_text(hjust = 0.5),                 
       legend.position = "top"                                 
@@ -113,7 +113,7 @@ The series exhibits a downward trend before 1966, followed by a clear upward tre
 ggseasonplot(training_data, year.labels=TRUE, year.labels.left=TRUE) +
   ylab("Unemployment") +
   ggtitle("Seasonality: quarterly unemployment in Canada")+
-    theme_tufte(base_family = "Helvetica") +                 
+    theme_tufte(base_family = "Aeonik") +                 
     theme(
       plot.title = element_text(hjust = 0.5),                 
       legend.position = "top"                                 
@@ -124,7 +124,7 @@ ggseasonplot(training_data, year.labels=TRUE, year.labels.left=TRUE) +
 ggsubseriesplot(training_data) +
   ylab("Unemployment") +
   ggtitle("Seasonal subseries: quarterly unemployment in Canada")+
-    theme_tufte(base_family = "Helvetica") +                 
+    theme_tufte(base_family = "Aeonik") +                 
     theme(
       plot.title = element_text(hjust = 0.5),                 
       legend.position = "top"                                 
@@ -138,7 +138,7 @@ gglagplot(training_data) +
   ggtitle("Lagged scatter plot: quarterly unemployment") +
     theme(legend.position = "bottom",
           axis.text.x = element_text(angle = 45, hjust = 1)) +
-    theme_tufte(base_family = "Helvetica") +                 
+    theme_tufte(base_family = "Aeonik") +                 
     theme(
       plot.title = element_text(hjust = 0.5),                 
       legend.position = "top"                                 
@@ -149,7 +149,7 @@ As the data are both trended and seasonal, we observe the slow decay in autocorr
 
 ```{r f5, fig.cap="Autocorrelation Function (ACF) plot of the quarterly unemployment in Canada in 1962-1973"}
 ggAcf(training_data, main = "ACF: unemployment in Canada in 1962-1973")+
-    theme_tufte(base_family = "Helvetica") +                 
+    theme_tufte(base_family = "Aeonik") +                 
     theme(
       plot.title = element_text(hjust = 0.5),                 
       legend.position = "top"                                 
@@ -161,7 +161,7 @@ As the data exhibits both trend and seasonality, decomposition can be a valuable
 ```{r f6, fig.cap="Decomposed quarterly unemployment in Canada in 1962-1973"}
 training_decomposed <- decompose(training_data, type = "multiplicative")
 autoplot(training_decomposed)+xlab("Year")+
-    theme_tufte(base_family = "Helvetica") +                 
+    theme_tufte(base_family = "Aeonik") +                 
     theme(
       plot.title = element_text(hjust = 0.5),                 
       legend.position = "top"                                 
@@ -188,7 +188,7 @@ df <- data.frame(
 ggplot(df, aes(x = Quarter, y = Value)) +
   geom_boxplot() +
   labs(title = "Distribution of unemployment in Canada in 1962-1973", x = "Quarter", y = "Unemployment")+
-    theme_tufte(base_family = "Helvetica") +                 
+    theme_tufte(base_family = "Aeonik") +                 
     theme(
       plot.title = element_text(hjust = 0.5),                 
       legend.position = "top"                                 
@@ -217,7 +217,7 @@ autoplot(training_data, series="Data") +
   xlab("Year") + ylab("Unemployment") +
   ggtitle("Regression model: historical vs fitted values") +
   guides(color = guide_legend(title = "")) +
-    theme_tufte(base_family = "Helvetica") +                 
+    theme_tufte(base_family = "Aeonik") +                 
     theme(
       plot.title = element_text(hjust = 0.5),                 
       legend.position = "top"                                 
@@ -274,7 +274,7 @@ autoplot(training_data) +
   ggtitle("Regression model: forecasts of unemployment in Canada") +
   guides(color = guide_legend(title = "Forecasts"),
          linetype = guide_legend(title = "Future Data")) +
-    theme_tufte(base_family = "Helvetica") +                 
+    theme_tufte(base_family = "Aeonik") +                 
     theme(
       plot.title = element_text(hjust = 0.5),                 
       legend.position = "top"                                 
@@ -344,7 +344,7 @@ autoplot(training_data, series="Data") +
   xlab("Year") + ylab("Unemployment") +
     ggtitle("ETS (M, Ad, M) model: historical vs fitted values") +
   guides(color = guide_legend(title = "")) +
-    theme_tufte(base_family = "Helvetica") +                 
+    theme_tufte(base_family = "Aeonik") +                 
     theme(
       plot.title = element_text(hjust = 0.5),                 
       legend.position = "top"                                 
@@ -389,7 +389,7 @@ autoplot(training_data) +
   ggtitle("ETS(M,Ad,M) model: forecasts of unemployment in Canada") +
   guides(color = guide_legend(title = "Forecasts"),
          linetype = guide_legend(title = "Future Data"))+
-    theme_tufte(base_family = "Helvetica") +                 
+    theme_tufte(base_family = "Aeonik") +                 
     theme(
       plot.title = element_text(hjust = 0.5),                 
       legend.position = "top"                                 
@@ -506,7 +506,7 @@ autoplot(training_diff)+
     ylab("Differenced unemployment")+
   guides(color = guide_legend(title = "")) +
   scale_fill_manual(values = c("lightblue", "skyblue"), labels = c("Yes", "No")) +
-  theme_tufte(base_family = "Helvetica") +
+  theme_tufte(base_family = "Aeonik") +
   theme(
     plot.title = element_text(hjust = 0.5),
     legend.position = "top"
@@ -534,7 +534,7 @@ autoplot(training_data, series="Data") +
  ggtitle("ARIMA(0,1,0)(1,1,0)[4] model: historical vs fitted values") +
   guides(color = guide_legend(title = "")) +
   scale_fill_manual(values = c("lightblue", "skyblue"), labels = c("Yes", "No")) +
-  theme_tufte(base_family = "Helvetica") +
+  theme_tufte(base_family = "Aeonik") +
   theme(
     plot.title = element_text(hjust = 0.5),
     legend.position = "top"
@@ -574,7 +574,7 @@ autoplot(training_data) +
   guides(color = guide_legend(title = "Forecasts"),
          linetype = guide_legend(title = "Future Data"))+
   scale_fill_manual(values = c("lightblue", "skyblue"), labels = c("Yes", "No")) +
-  theme_tufte(base_family = "Helvetica") +
+  theme_tufte(base_family = "Aeonik") +
   theme(
     plot.title = element_text(hjust = 0.5),
     legend.position = "top"
