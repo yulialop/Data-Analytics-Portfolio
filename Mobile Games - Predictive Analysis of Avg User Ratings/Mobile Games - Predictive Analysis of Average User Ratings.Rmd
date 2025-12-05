@@ -1,9 +1,9 @@
 ---
 title: "Mobile Games: Predictive Analysis of Average User Ratings"
-author: 'YLG'
-date: "`r format(Sys.Date(), '%B %d, %Y')`"
+author: 'Yulia Lopatina'
 output:
   bookdown::html_document2:
+    css: styles.css
     toc: true
     theme: cerulean
     highlight: monochrome
@@ -14,7 +14,7 @@ output:
 editor_options:
   chunk_output_type: inline
 fontsize: 12pt 
-fontfamily: Helvetica  
+fontfamily: Aeonik  
 geometry: "width=90%"           
 ---
 
@@ -116,7 +116,7 @@ games_data <- original_data |>
 
 ## Dataset Splitting
 
-To avoid data leakage and ensure a robust evaluation, the dataset will be split into training (70%), validation (15%), and test (15%) subsets using stratified sampling based on the target variable. Stratification preserves the `Average User Rating` distribution across subsets, ensuring representativeness. The training set will be reserved for data transformations, preprocessing, and exploratory data analysis (EDA), while the validation set will guide hyperparameter tuning. The test set will be held out for final evaluation, ensuring an unbiased assessment of the model on unseen data. 
+To avoid data leakage and ensure a robust evaluation, the dataset is to be split into training (70%), validation (15%), and test (15%) subsets using stratified sampling based on the target variable. Stratification preserves the `Average User Rating` distribution across subsets, ensuring representativeness. The training set serves for data transformations, preprocessing, and exploratory data analysis (EDA), while the validation set will guide hyperparameter tuning. The test set will be held out for final evaluation, ensuring an unbiased assessment of the model on unseen data. 
 
 ```{r}
 # Load the rsample library for data splitting
@@ -206,7 +206,7 @@ ggplotly(
       x = "Average User Rating",                              
       y = "Density"                                           
     ) +
-    theme_tufte(base_family = "Helvetica") +                 
+    theme_tufte(base_family = "Aeonik") +                 
     theme(
       plot.title = element_text(hjust = 0.5),                 
       legend.position = "top"                                 
@@ -221,7 +221,7 @@ ggplotly(
       xref = "paper",
       yref = "paper",
       showarrow = FALSE,                                      # Disable the arrow for annotation
-      font = list(size = 12, family = "Helvetica")            # Set font style for the annotation
+      font = list(size = 12, family = "Aeonik")            # Set font style for the annotation
     )
   )
 ```
@@ -357,7 +357,7 @@ ggplot(train_set, aes(x = `Average User Rating`, fill = factor(`Paid App`))) +
     fill = "Free App?"
   ) +
   scale_fill_manual(values = c("lightblue", "skyblue"), labels = c("Yes", "No")) +
-  theme_tufte(base_family = "Helvetica") +
+  theme_tufte(base_family = "Aeonik") +
   theme(
     plot.title = element_text(hjust = 0.5),
     legend.position = "top"
@@ -381,7 +381,7 @@ ggplot(train_set, aes(x = `Average User Rating`, y = factor(`Paid App`, labels =
     y = "",
     fill = "Free App?"
   ) +
-  theme_tufte(base_family = "Helvetica") +
+  theme_tufte(base_family = "Aeonik") +
   theme(
     plot.title = element_text(hjust = 0.5),
     legend.position = "none"
@@ -408,7 +408,7 @@ ggpairs(
   upper = list(continuous = wrap("cor", size = 2.5)),
   lower = list(continuous = wrap("points", alpha = 0.6))
 ) +
-  theme_tufte(base_family = "Helvetica") +
+  theme_tufte(base_family = "Aeonik") +
   theme(
     plot.title = element_text(hjust = 0.5),
     legend.position = "top"
@@ -432,7 +432,7 @@ ggplotly(ggplot(train_set, aes(x = `Description Sentiment`, y = `Average User Ra
   labs(title = "Description Sentiment vs. Average User Rating",
        x = "Description Sentiment",
        y = "Average User Rating") +
-  theme_tufte(base_family = "Helvetica") +
+  theme_tufte(base_family = "Aeonik") +
   theme(
     plot.title = element_text(hjust = 0.5),
     legend.position = "top"
@@ -445,7 +445,7 @@ ggplotly(ggplot(train_set, aes(x = `Description Sentiment`, y = `Average User Ra
     xref = "paper",
     yref = "paper",
     showarrow = FALSE,
-    font = list(size = 12, family = "Helvetica")
+    font = list(size = 12, family = "Aeonik")
   )
 )
 ```
@@ -497,7 +497,7 @@ ggplot(heatmap_data, aes(x = reorder(Genre, -`Average User Rating`), y = `Averag
     low = "lightblue", high = "darkblue",
     labels = scales::comma                                   # Format numbers with commas
   ) +
- theme_minimal(base_family = "Helvetica") +
+ theme_minimal(base_family = "Aeonik") +
   theme(
     plot.title = element_text(hjust = 0.5, size = 12),
     legend.position = "right",                
@@ -570,7 +570,7 @@ xgb.ggplot.shap.summary(
   model = xgb_model_base,
   data = as.matrix(train_features)) +
   ggtitle("SHAP Feature Importance of the XGBoost Model") +
-  theme_tufte(base_family = "Helvetica") +
+  theme_tufte(base_family = "Aeonik") +
   theme(
     plot.title = element_text(hjust = 0.5)) +
   labs(
@@ -668,7 +668,7 @@ plot_density_distribution <- function(actual_values, predicted_values) {
     labs(title = "Density Distribution of the Target Variable",
          x = "Average User Rating", y = "Density",
          fill = "", color = "") +  # Axis and legend labels
-    theme_tufte(base_family = "Helvetica") +
+    theme_tufte(base_family = "Aeonik") +
     theme(
     plot.title = element_text(hjust = 0.5),
     legend.position = "top"
@@ -912,7 +912,7 @@ xgb.ggplot.shap.summary(
   model = xgb_model,
   data = as.matrix(train_features)) +
   ggtitle("SHAP Feature Importance of the XGBoost Model") +
-  theme_tufte(base_family = "Helvetica") +
+  theme_tufte(base_family = "Aeonik") +
   theme(
     plot.title = element_text(hjust = 0.5)) +
   labs(
